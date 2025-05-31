@@ -31,7 +31,7 @@ public class CrawlCleanService {
 	
 	
 	public Object formatData(String url) {
-	    System.out.println("in formatData (JSON-LD)");
+	    System.out.println("in formatData");
 
 	    try {
 	        Document doc = Jsoup.connect(url).get();
