@@ -15,7 +15,8 @@ import org.springframework.stereotype.Service;
 import crawl.bean.JobShareInfo;
 import crawl.dto.JobInterviewInfoDTO;
 import crawl.dto.WorkReviewInfoDTO;
-
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 @Service
 public class CrawlCleanService {
 	
@@ -29,34 +30,86 @@ public class CrawlCleanService {
 	}
 	
 	
-	//決定要用哪個方法（面試或工作經驗）
 	public Object formatData(String url) {
-		System.out.println("in formatData");
-		
-		String jid=url.replace("https://www.goodjob.life/experiences/", "");
-		try {
-			Document doc=Jsoup.connect(url).get();
-			Elements type=doc.select(".src-components-ExperienceDetail-Heading-__Heading-module___badge");
-			
-			if("面試經驗".equals(type.html())) {
-				JobInterviewInfoDTO interview = formatInterviewInfo(doc);
-				
-				return interview;
-			}else if("工作心得".equals(type.html())) {
-				WorkReviewInfoDTO review = formatWorkReviewInfo(doc);
-				return review;
-			}
-			
-			
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		System.out.println("end formatData");
-		return "nooooooo";
-		
+	    System.out.println("in formatData (JSON-LD)");
+
+	    try {
+	        Document doc = Jsoup.connect(url).get();
+	        Elements scripts = doc.select("script[type=application/ld+json]");
+
+	        for (Element script : scripts) {
+	            String json = script.html();
+
+	            ObjectMapper mapper = new ObjectMapper();
+	            JsonNode root = mapper.readTree(json);
+
+	            String type = root.get("@type").asText();
+	            if (!"Article".equals(type)) continue;
+
+	            JsonNode headlineNode = root.get("headline");
+	            JsonNode datePublishedNode = root.get("datePublished");
+	            JsonNode descriptionNode = root.get("description");
+
+	            WorkReviewInfoDTO wDto = new WorkReviewInfoDTO();
+	            wDto.setPageTitle(headlineNode.asText());
+	            wDto.setShareDate(datePublishedNode.asText());
+	            wDto.setShareContent(descriptionNode.asText());
+	            wDto.setShareType("工作心得");
+
+	            // 從 description 拆欄位（例如：待遇、地區等）
+	            parseFromDescription(descriptionNode.asText(), wDto);
+
+	            return wDto;
+	        }
+
+	    } catch (IOException e) {
+	        e.printStackTrace();
+	    }
+
+	    System.out.println("end formatData");
+	    return "not found";
 	}
-	
+	private void parseFromDescription(String description, WorkReviewInfoDTO wDto) {
+	    if (description.contains("工作地區：")) {
+	        String area = extractBetween(description, "工作地區：", "。");
+	        wDto.setArea(area);
+	    }
+
+	    if (description.contains("相關職務經驗：")) {
+	        String yearStr = extractBetween(description, "相關職務經驗：", "。").replaceAll("\\D+", "");
+	        if (!yearStr.isEmpty()) {
+	            wDto.setRelativeExperienceYear(Float.parseFloat(yearStr));
+	        }
+	    }
+
+	    if (description.contains("每週工時：")) {
+	        String hoursStr = extractBetween(description, "每週工時：", "小時");
+	        if (!hoursStr.isEmpty()) {
+	            wDto.setPerWeekWorkHours(Integer.parseInt(hoursStr));
+	        }
+	    }
+
+	    if (description.contains("薪水：")) {
+	        String salary = extractBetween(description, "薪水：", "。");
+	        wDto.setTreatment(salary);
+	    }
+
+	    if (description.contains("可以考慮")) {
+	        wDto.setIsGood(1); // 推薦
+	    } else {
+	        wDto.setIsGood(0); // 不推薦或不明
+	    }
+	}
+
+	private String extractBetween(String text, String start, String end) {
+	    int startIndex = text.indexOf(start);
+	    if (startIndex == -1) return "";
+	    startIndex += start.length();
+	    int endIndex = text.indexOf(end, startIndex);
+	    if (endIndex == -1) return text.substring(startIndex).trim();
+	    return text.substring(startIndex, endIndex).trim();
+	}
+
 	
 	public JobInterviewInfoDTO formatInterviewInfo(Document doc) {
 		System.out.println("in formatInterviewInfo");
