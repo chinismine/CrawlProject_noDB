@@ -69,6 +69,7 @@ public class CrawlCleanService {
 	    System.out.println("end formatData");
 	    return "not found";
 	}
+	
 	private void parseFromDescription(String description, WorkReviewInfoDTO wDto) {
 	    if (description.contains("工作地區：")) {
 	        String area = extractBetween(description, "工作地區：", "。");
@@ -101,6 +102,7 @@ public class CrawlCleanService {
 	    }
 	}
 
+	//取得關鍵字段
 	private String extractBetween(String text, String start, String end) {
 	    int startIndex = text.indexOf(start);
 	    if (startIndex == -1) return "";
